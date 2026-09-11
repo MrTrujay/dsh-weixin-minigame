@@ -1,0 +1,43 @@
+# @trujaycc/dsh-weixin-minigame bundle patch.
+#
+# Two rows: the plugin's own node half (skill + preview-status route), and the
+# MCP bridge that gives the agent the WeChat Mini Game tools.
+#
+# Install into a profile with:
+#   dsh plugin --profile <name> add @trujaycc/dsh-weixin-minigame
+# New rows are added through `insert` (a bare row targets an existing row by
+# id). The plugin row mounts the node half; its browser half is advertised and
+# served through the package's dsh.client manifest.
+
+- insert:
+    # The skill and the /minigame/status route the preview panel polls.
+    # Nothing here is per-session: the host skill registry reaches every session
+    # of every agent preset.
+    - id: weixin-minigame
+      name: '@trujaycc/dsh-weixin-minigame'
+
+    # MCP bridge to the upstream mini game helper server (preview server, wx
+    # API compatibility layer, and miniprogram-ci upload). Tools reach the
+    # model as mcp__minigame__run_game, mcp__minigame__get_logs,
+    # mcp__minigame__real_device_preview, mcp__minigame__publish, and so on.
+    #
+    # The upstream version is PINNED on purpose. With @latest, every boot
+    # fetched and executed whatever upstream had published by then, in every
+    # user's environment, with no review step here. Bump this deliberately:
+    # check the upstream release, then run this package's tests before
+    # changing the pin.
+    # failOnStartupError is false on purpose: this server is installed on
+    # demand by npx and needs network access, and a machine without either
+    # must not lose its whole Web session to a failing MCP handshake. A failed
+    # startup leaves the bridge without tools and logs the reason.
+    - id: minigame-mcp
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: minigame
+        transport: stdio
+        command: npx
+        args:
+          - '-y'
+          - '--prefer-online'
+          - '@weadmin/weixin-minigame-helper-mcp@0.1.35'
+        failOnStartupError: false

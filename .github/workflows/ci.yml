@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # `prepare` builds the package, so this also proves a clean checkout can
+      # produce the runtime files the manifest promises.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run typecheck
+      - run: pnpm test
+
+      # Guards the class of defect a `files` allowlist can hide: something the
+      # package advertises but does not ship, or an export pointing at a path
+      # that is never published. Both shipped once already.
+      - name: Check the published file list
+        run: |
+          pnpm pack > /dev/null
+          tar -tzf trujaycc-dsh-weixin-minigame-*.tgz > entries.txt
+          status=0
+          for f in \
+            lib/index.js \
+            lib/client.js \
+            lib/client.js.map \
+            assets/weixin-minigame-helper.md \
+            cordis.patch.yml \
+            README.md \
+            README.zh.md \
+            LICENSE \
+            docs/screenshot.png
+          do
+            if ! grep -qx "package/$f" entries.txt; then
+              echo "::error::missing from the published package: $f"
+              status=1
+            fi
+          done
+          for unwanted in src/ tests/; do
+            if grep -q "^package/$unwanted" entries.txt; then
+              echo "::error::$unwanted must not be published"
+              status=1
+            fi
+          done
+          [ "$status" -eq 0 ] || exit 1
+          echo "package contents ok ($(wc -l < entries.txt) entries)"

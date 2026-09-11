@@ -1,0 +1,218 @@
+/* Mini game preview surfaces: the session-header trigger and its window.
+   Colors come from the shared dsw alias tokens only. */
+
+/* Mirrors the Session log capsule so the two sit as one row in the session
+   header's utilities cluster. */
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 6px 12px;
+  gap: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  font-family: var(--dsw-font-family);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.trigger:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.trigger[data-active] {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.trigger span,
+.triggerIcon {
+  flex: none;
+}
+
+.trigger span {
+  white-space: nowrap;
+}
+
+/* Reports what the window would show: green while a packaged game is being
+   served, quiet otherwise, hollow when the plugin's route does not answer. */
+.triggerLamp {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-caption);
+}
+
+.triggerLamp[data-state='live'] {
+  background: var(--dsw-alias-state-success-primary);
+  box-shadow: 0 0 0 3px var(--dsw-alias-state-success-tertiary);
+}
+
+.triggerLamp[data-state='unknown'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--dsw-alias-label-caption);
+}
+
+.triggerIcon {
+  transition: transform 120ms ease;
+}
+
+.triggerIcon[data-active] {
+  transform: rotate(180deg);
+}
+
+.panel {
+  position: fixed;
+  top: 56px;
+  right: 16px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 520px;
+  height: 620px;
+  min-width: 300px;
+  min-height: 240px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  resize: both;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: var(--dsw-shadow-lv3);
+}
+
+/* Collapsed, not unmounted: the preview page stays alive so the game keeps
+   running instead of reloading on the next look. */
+.panel[data-hidden] {
+  display: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 6px 8px 6px 4px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-2);
+  user-select: none;
+}
+
+/* The only drag handle. Keeping pointer capture off the rest of the header is
+   what lets the controls inside it receive their clicks. */
+.grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 20px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--dsw-alias-label-caption);
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.grip:active {
+  cursor: grabbing;
+}
+
+.title {
+  flex: none;
+  color: var(--dsw-alias-label-primary);
+  font: var(--dsw-font-s-strong-14);
+}
+
+.meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-caption);
+  font: var(--dsw-font-xxs-12);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.action {
+  padding: 3px 8px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxs-12);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.action:disabled {
+  color: var(--dsw-alias-label-caption);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--dsw-static-neutral-00);
+}
+
+.empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.emptyTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-s-strong-14);
+}
+
+.emptyBody {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font: var(--dsw-font-xs-13);
+}
+
+.hint {
+  width: 100%;
+  margin: 0;
+  padding: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 8px;
+  background: var(--dsw-alias-markdown-code-block);
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-markdown-code-block);
+  text-align: left;
+  white-space: pre-wrap;
+}

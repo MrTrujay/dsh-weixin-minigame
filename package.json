@@ -1,0 +1,76 @@
+{
+  "name": "@trujaycc/dsh-weixin-minigame",
+  "description": "Preview, debug (logs and screenshots), and publish WeChat Mini Games inside the dsh Web GUI, through the official mini game helper service",
+  "version": "0.1.0",
+  "author": {
+    "name": "trujaycc",
+    "url": "https://github.com/MrTrujay"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MrTrujay/dsh-weixin-minigame"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "weixin",
+    "minigame",
+    "wechat"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "^22.10.2",
+    "@types/react": "~18.3.1",
+    "jsdom": "^29.1.1",
+    "lightningcss": "^1.32.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.3.1",
+    "tsdown": "^0.22.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/client.js.map",
+    "assets/*",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE",
+    "docs/*"
+  ],
+  "scripts": {
+    "prepare": "pnpm run build",
+    "prepublishOnly": "pnpm run build",
+    "build": "tsdown",
+    "watch": "tsdown --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  }
+}
