@@ -56,13 +56,12 @@ git push origin v0.1.0
 that disagrees with `package.json`, and publishes with npm provenance. It needs
 an `NPM_TOKEN` repository secret and nothing else.
 
-Publish from CI rather than by hand. `npm config get registry` on a development
-machine can point at a mirror, and a manual `npm publish` then targets that
-mirror instead of the registry users install from. If you must publish locally,
-name the registry explicitly:
+`publishConfig.registry` pins the publish target to the registry users install
+from, so a machine whose `npm config get registry` is a mirror still publishes
+to npmjs. Installs are unaffected and keep using that machine's registry:
 
 ```sh
-npm publish --registry https://registry.npmjs.org --access public
+npm publish
 ```
 
 ## The upstream pin

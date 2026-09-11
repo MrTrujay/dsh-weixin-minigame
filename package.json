@@ -28,7 +28,8 @@
   },
   "packageManager": "pnpm@11.7.0",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "type": "module",
   "main": "lib/index.js",
