@@ -22,6 +22,9 @@ import { STATUS_ROUTE, type MinigameStatus } from '../minigame/wire.ts'
 /** How often the plugin re-reads the preview state. */
 const POLL_INTERVAL_MS = 2500
 
+/** Poll deadline, kept below the interval so a stalled request cannot pile up. */
+const POLL_TIMEOUT_MS = 2000
+
 /** Structural face of the host slot registry this plugin consumes (runtime-provided). */
 export interface SlotRegistryFace {
   inject(key: string, callback: () => (() => void) | Iterable<() => void>): () => void
@@ -60,7 +63,10 @@ export function apply(ctx: MinigameClientContext): void {
 
   const tick = async (): Promise<void> => {
     try {
-      const response = await fetch(STATUS_ROUTE, { headers: { accept: 'application/json' } })
+      const response = await fetch(STATUS_ROUTE, {
+        headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(POLL_TIMEOUT_MS),
+      })
       if (!response.ok) throw new Error(`status ${response.status}`)
       const body = await response.json() as MinigameStatus
       if (disposed) return

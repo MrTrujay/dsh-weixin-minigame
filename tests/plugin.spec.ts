@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { SKILL_NAME, apply, type EffectResult, type MinigameHostContext } from '../src/index.ts'
+import { SKILL_NAME, apply, inject, type MinigameHostContext } from '../src/index.ts'
 import { STATUS_ROUTE, type MinigameStatus } from '../src/minigame/wire.ts'
 
 interface CapturedRoute {
@@ -43,35 +43,65 @@ interface Host {
   skills: Record<string, unknown>[]
   routes: CapturedRoute[]
   disposers: (() => void)[]
+  labels: string[]
+  /** Await every contribution whose callback was asynchronous. */
+  settle: () => Promise<void>
 }
 
 /**
- * Build a host context that records every registration.
- * @param withWebServer - whether the optional `webServer` service exists.
+ * Build a host context that records every registration, and that resolves a
+ * dynamic injection only when the host actually provides that service.
+ * @param services - which optional services this host provides.
  * @returns the captured host.
  */
-function fakeHost(withWebServer: boolean): Host {
+function fakeHost(services: { skills?: boolean; webServer?: boolean } = {}): Host {
   const skills: Record<string, unknown>[] = []
   const routes: CapturedRoute[] = []
   const disposers: (() => void)[] = []
+  const labels: string[] = []
+  const pending: Promise<unknown>[] = []
+
+  /** Apply a contribution the way the real runtime does, through `effect`. */
+  const effect = (callback: () => unknown, label?: string): (() => void) => {
+    if (label !== undefined) labels.push(label)
+    const result = callback()
+    if (typeof result === 'function') disposers.push(result as () => void)
+    return () => {}
+  }
+
+  const scopes: Record<string, unknown> = {}
+  if (services.skills !== false) {
+    scopes['skills'] = {
+      skills: { register: (skill: Record<string, unknown>) => { skills.push(skill); return () => {} } },
+      effect,
+    }
+  }
+  if (services.webServer !== false) {
+    scopes['webServer'] = {
+      webServer: { register: (route: CapturedRoute) => { routes.push(route); return () => {} } },
+      effect,
+    }
+  }
+
+  const ctx = {
+    inject(names: readonly string[], callback: (scope: never) => unknown) {
+      const scope = scopes[names[0] ?? '']
+      // An absent service means the injection never resolves, exactly as the
+      // real runtime parks the callback until that service appears.
+      if (scope === undefined) return undefined
+      const result = callback(scope as never)
+      if (result instanceof Promise) pending.push(result)
+      return result
+    },
+  } as unknown as MinigameHostContext
+
   return {
+    ctx,
     skills,
     routes,
     disposers,
-    ctx: {
-      skills: { register: (skill) => { skills.push(skill as unknown as Record<string, unknown>); return () => {} } },
-      get: (name) => (name === 'webServer' && withWebServer
-        ? { register: (route: CapturedRoute) => { routes.push(route); return () => {} } }
-        : undefined),
-      effect: (callback: () => EffectResult) => {
-        const result = callback()
-        if (typeof result === 'function') disposers.push(result)
-        else if (result !== undefined && result !== null && Symbol.iterator in result) {
-          for (const disposer of result as Iterable<() => void>) disposers.push(disposer)
-        }
-        return () => {}
-      },
-    },
+    labels,
+    settle: async () => { await Promise.all(pending) },
   }
 }
 
@@ -104,6 +134,12 @@ function route(host: Host, path: string): CapturedRoute {
   return found
 }
 
+/** Apply the plugin and wait for its asynchronous contributions. */
+async function activate(host: Host): Promise<void> {
+  apply(host.ctx)
+  await host.settle()
+}
+
 /** Invoke the status route and return what it wrote. */
 async function callStatus(
   host: Host,
@@ -115,15 +151,22 @@ async function callStatus(
 }
 
 describe('plugin activation', () => {
+  it('declares no required services, so a partial profile still loads it', () => {
+    // A required injection would leave the plugin pending in a profile that
+    // lacks the service, contributing neither the skill nor the route.
+    expect(inject).toEqual([])
+  })
+
   it('registers the minigame skill with its shipped body', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
 
     expect(host.skills).toHaveLength(1)
     const skill = host.skills[0]
     expect(skill?.['name']).toBe(SKILL_NAME)
     expect(skill?.['source']).toBe('bundled')
     expect(String(skill?.['description'])).toContain('微信小游戏')
+    expect(String(skill?.['whenToUse'])).toContain('小游戏')
     const body = String(skill?.['content'])
     expect(body).toContain('mcp__minigame__run_game')
     expect(body).toContain('mcp__minigame__get_logs')
@@ -131,8 +174,8 @@ describe('plugin activation', () => {
   })
 
   it('registers no slash commands, because the skill and the MCP tools cover them', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
 
     // The context the plugin is handed has no command registry at all, so a
     // reintroduced registration would throw rather than pass silently.
@@ -141,37 +184,49 @@ describe('plugin activation', () => {
   })
 
   it('registers the status route when a web surface exists', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
 
     expect(host.routes.map(entry => entry.path)).toEqual([STATUS_ROUTE])
     expect(host.routes[0]?.kind).toBe('exact')
   })
 
-  it('registers no route without a web surface, and still contributes the skill', async () => {
-    const host = fakeHost(false)
-    await apply(host.ctx)
+  it('still registers the route when no skill registry exists', async () => {
+    const host = fakeHost({ skills: false })
+    await activate(host)
+
+    expect(host.skills).toEqual([])
+    expect(host.routes.map(entry => entry.path)).toEqual([STATUS_ROUTE])
+  })
+
+  it('still registers the skill when no web surface exists', async () => {
+    const host = fakeHost({ webServer: false })
+    await activate(host)
 
     expect(host.routes).toEqual([])
     expect(host.skills).toHaveLength(1)
   })
 
   it('returns a disposer for every registration it made', async () => {
-    const withWeb = fakeHost(true)
-    await apply(withWeb.ctx)
-    expect(withWeb.disposers).toHaveLength(2)
+    const both = fakeHost()
+    await activate(both)
+    expect(both.disposers).toHaveLength(2)
+    expect(both.disposers.every(disposer => typeof disposer === 'function')).toBe(true)
 
-    const withoutWeb = fakeHost(false)
-    await apply(withoutWeb.ctx)
-    expect(withoutWeb.disposers).toHaveLength(1)
-    expect(withoutWeb.disposers.every(disposer => typeof disposer === 'function')).toBe(true)
+    const skillOnly = fakeHost({ webServer: false })
+    await activate(skillOnly)
+    expect(skillOnly.disposers).toHaveLength(1)
+
+    const routeOnly = fakeHost({ skills: false })
+    await activate(routeOnly)
+    expect(routeOnly.disposers).toHaveLength(1)
   })
 })
 
 describe('GET /minigame/status', () => {
   it('answers with the preview state and no caching', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
     const captured = await callStatus(host)
 
     expect(captured.status).toBe(200)
@@ -181,8 +236,8 @@ describe('GET /minigame/status', () => {
   })
 
   it('carries the recorded origin when a preview was recorded', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
     const home = process.env['USERPROFILE'] ?? ''
     mkdirSync(join(home, '.weixin-minigame-helper'), { recursive: true })
     writeFileSync(
@@ -197,20 +252,20 @@ describe('GET /minigame/status', () => {
   })
 
   it('rejects a non-read method', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
     expect((await callStatus(host, { method: 'POST' })).status).toBe(405)
   })
 
   it('accepts a HEAD probe', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
     expect((await callStatus(host, { method: 'HEAD' })).status).toBe(200)
   })
 
   it('refuses a caller that is not on loopback', async () => {
-    const host = fakeHost(true)
-    await apply(host.ctx)
+    const host = fakeHost()
+    await activate(host)
     expect((await callStatus(host, { remoteAddress: '10.0.0.7' })).status).toBe(403)
   })
 })

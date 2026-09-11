@@ -38,6 +38,7 @@ jobs:
           status=0
           for f in \
             lib/index.js \
+            lib/index.d.ts \
             lib/client.js \
             lib/client.js.map \
             assets/weixin-minigame-helper.md \

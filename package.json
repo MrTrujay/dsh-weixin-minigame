@@ -7,6 +7,10 @@
     "url": "https://github.com/MrTrujay"
   },
   "license": "MIT",
+  "homepage": "https://github.com/MrTrujay/dsh-weixin-minigame#readme",
+  "bugs": {
+    "url": "https://github.com/MrTrujay/dsh-weixin-minigame/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/MrTrujay/dsh-weixin-minigame"
@@ -19,13 +23,21 @@
     "minigame",
     "wechat"
   ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.7.0",
   "publishConfig": {
     "access": "public"
   },
   "type": "module",
   "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "exports": {
-    ".": "./lib/index.js",
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
     "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
@@ -41,21 +53,28 @@
   "peerDependencies": {
     "react": "^18.2.0"
   },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "16.3.2",
+    "@testing-library/react": "^16.3.2",
     "@types/node": "^22.10.2",
     "@types/react": "~18.3.1",
     "jsdom": "^29.1.1",
     "lightningcss": "^1.32.0",
-    "react": "^18.2.0",
+    "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tsdown": "^0.22.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "yaml": "^2.9.0"
   },
   "files": [
     "lib/index.js",
+    "lib/index.d.ts",
     "lib/client.js",
     "lib/client.js.map",
     "assets/*",
@@ -67,7 +86,7 @@
   ],
   "scripts": {
     "prepare": "pnpm run build",
-    "prepublishOnly": "pnpm run build",
+    "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test",
     "build": "tsdown",
     "watch": "tsdown --watch",
     "test": "vitest run",

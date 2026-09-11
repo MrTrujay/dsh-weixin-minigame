@@ -17,7 +17,7 @@ export const HELPER_STATE_DIR = '.weixin-minigame-helper'
 /** State file naming the running preview server. */
 export const PREVIEW_STATE_FILE = 'preview-server.json'
 
-/** How long a liveness probe waits before reporting the preview as down. */
+/** Default time a liveness probe waits before reporting the preview as down. */
 const PROBE_TIMEOUT_MS = 1200
 
 /** The subset of the helper's preview state this plugin relies on. */
@@ -122,14 +122,16 @@ export function readPreviewRecord(): PreviewRecord | undefined {
 /**
  * Ask a recorded preview origin whether it is still serving.
  * @param url - normalized preview origin.
+ * @param timeoutMs - probe deadline. Tests pass a budget wide enough to
+ * survive a loaded machine, where the default can expire on a live server.
  * @returns whether the server answered before the probe deadline.
  */
-export async function probePreview(url: string): Promise<boolean> {
+export async function probePreview(url: string, timeoutMs: number = PROBE_TIMEOUT_MS): Promise<boolean> {
   try {
     const response = await fetch(url, {
       method: 'GET',
       redirect: 'manual',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
     return response.status < 500
   } catch {

@@ -100,7 +100,7 @@ A trigger button joins the top-right of the session header (the lamp on its left
 
 - **The upstream MCP server is a third-party dependency.** It is fetched by `npx` at boot, with the version pinned in `cordis.patch.yml` (currently `0.1.35`). Tool names, parameters, and behaviour can change with an upstream release, so run this plugin's tests before bumping that pin.
 - **The official mini game helper service leaves files in the game project** (screenshots, and so on). Add them to `.gitignore` yourself.
-- **One preview server per machine, shared across dsh instances.** The helper records where it listens in a single file under the user's home directory, and the first one to bind takes the default port, so a second dsh process running this plugin overwrites that record and serves on the next free port.
+- **One preview server per machine, shared across dsh instances and other hosts.** The helper records where it listens in a single file under the user's home directory, and the first process to bind takes the default port, so a second process using the helper (another dsh instance, or the official editor extension) overwrites that record and serves on the next free port.
 - **The preview status is readable by any caller on the loopback interface.** It exposes nothing but a local address, so that is proportionate; there is no authentication beyond it.
 - **Restart required for first activation.** The client-module registry's package metadata cache never expires, so a freshly installed plugin is invisible until `dsh web` restarts.
 

@@ -1,13 +1,21 @@
 /**
  * WeChat Mini Game plugin, node half.
  *
- * Two host-plane contributions, both of which exist for every session
- * regardless of the agent preset in play:
+ * Two host-plane contributions, each registered under its own dynamic
+ * injection:
  *
  * - the `weixin-minigame-helper` skill, whose body carries the preview/repair
  *   loop the model follows after it writes game code;
  * - the `GET /minigame/status` route the browser half polls for the preview
  *   address.
+ *
+ * Neither is a required `inject`. A required injection holds the whole plugin
+ * pending, so a profile missing either registry would silently contribute
+ * nothing at all — and reading the service with `ctx.get` instead would sample
+ * the global store at activation time and could miss a provider that mounts
+ * later. The dynamic form waits for the service without either problem: the
+ * plugin is always loaded, and each half appears exactly when the profile can
+ * host it.
  *
  * No slash commands are registered. Resolving the game directory, judging
  * whether credentials are configured, and agreeing a version number are all
@@ -15,11 +23,8 @@
  * guidance — and the upstream server reports its own `configMissing` state,
  * which is more accurate than this side reading `project.config.json`.
  *
- * The MCP tools themselves are not registered here: the bundle patch mounts
+ * The MCP tools are not registered here either: the bundle patch mounts
  * `@deepseek-ai/dsh-mcp-client` against the upstream mini game helper server.
- *
- * `webServer` is read through `ctx.get` rather than declared as an injection so
- * the skill still works in a profile without a Web surface.
  */
 import { readFile } from 'node:fs/promises'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -61,18 +66,26 @@ export interface WebServerFace {
 /** What an effect callback may return: nothing, one disposer, or many yielded ones. */
 export type EffectResult = void | (() => void) | Iterable<() => void>
 
-/** The host services this plugin consumes. */
-export interface MinigameHostContext {
-  /** Skill registry; required, because the skill is the point of the plugin. */
+/** Scope handed to the skill contribution once a skill registry exists. */
+export interface SkillScope {
   readonly skills: SkillRegistryFace
-  /** Read an optional service; `webServer` is absent outside the Web surface. */
-  get(name: string): unknown
-  /** Register a disposer against this plugin's fiber. */
   effect(callback: () => EffectResult, label?: string): () => void
 }
 
-/** Required services. `webServer` is deliberately not one of them. */
-export const inject = ['skills']
+/** Scope handed to the route contribution once a web server exists. */
+export interface WebServerScope {
+  readonly webServer: WebServerFace
+  effect(callback: () => EffectResult, label?: string): () => void
+}
+
+/** The host context this plugin needs; both services are optional. */
+export interface MinigameHostContext {
+  inject(services: readonly ['skills'], callback: (scope: SkillScope) => void | Promise<void>): unknown
+  inject(services: readonly ['webServer'], callback: (scope: WebServerScope) => void | Promise<void>): unknown
+}
+
+/** Required services: deliberately none, so the plugin is never held pending. */
+export const inject: readonly string[] = []
 
 /**
  * Read the skill body shipped beside this module.
@@ -127,26 +140,29 @@ async function handleStatus(req: IncomingMessage, res: ServerResponse): Promise<
 }
 
 /**
- * Register the skill and, when a Web surface exists, the status route.
- * @param ctx - host context carrying the skill registry.
+ * Contribute the skill and the status route to whichever registries this
+ * profile hosts.
+ * @param ctx - host context carrying the optional registries.
  */
-export async function apply(ctx: MinigameHostContext): Promise<void> {
-  const content = await readSkillBody()
-  ctx.effect(() => ctx.skills.register({
-    name: SKILL_NAME,
-    description: SKILL_DESCRIPTION,
-    whenToUse: SKILL_WHEN_TO_USE,
-    content,
-    source: 'bundled',
-  }), 'weixin-minigame: skill')
+export function apply(ctx: MinigameHostContext): void {
+  ctx.inject(['skills'], async (scope) => {
+    // Read here rather than in apply() so a missing asset fails this one
+    // contribution instead of the plugin's activation.
+    const content = await readSkillBody()
+    scope.effect(() => scope.skills.register({
+      name: SKILL_NAME,
+      description: SKILL_DESCRIPTION,
+      whenToUse: SKILL_WHEN_TO_USE,
+      content,
+      source: 'bundled',
+    }), 'weixin-minigame: skill')
+  })
 
-  // Optional service: a profile without the Web surface has no webServer, and
-  // the skill above still works there.
-  const webServer = ctx.get('webServer') as WebServerFace | undefined
-  if (webServer === undefined) return
-  ctx.effect(() => webServer.register({
-    kind: 'exact',
-    path: STATUS_ROUTE,
-    handler: (req, res) => (isLoopback(req) ? handleStatus(req, res) : sendJson(res, 403, { error: 'loopback only' })),
-  }), 'weixin-minigame: status route')
+  ctx.inject(['webServer'], (scope) => {
+    scope.effect(() => scope.webServer.register({
+      kind: 'exact',
+      path: STATUS_ROUTE,
+      handler: (req, res) => (isLoopback(req) ? handleStatus(req, res) : sendJson(res, 403, { error: 'loopback only' })),
+    }), 'weixin-minigame: status route')
+  })
 }

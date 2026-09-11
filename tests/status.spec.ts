@@ -109,6 +109,10 @@ describe('readPreviewRecord', () => {
   })
 })
 
+/** Probe budget for these tests: wide enough that a loaded machine cannot
+ * expire it against a server that is answering. */
+const PROBE_BUDGET_MS = 10_000
+
 describe('probePreview', () => {
   /**
    * Start a server answering every request with the given status.
@@ -126,15 +130,15 @@ describe('probePreview', () => {
   }
 
   it('reports a serving preview as alive', async () => {
-    expect(await probePreview(await serve(200))).toBe(true)
+    expect(await probePreview(await serve(200), PROBE_BUDGET_MS)).toBe(true)
   })
 
   it('still reports a 4xx preview as alive, because the page exists', async () => {
-    expect(await probePreview(await serve(404))).toBe(true)
+    expect(await probePreview(await serve(404), PROBE_BUDGET_MS)).toBe(true)
   })
 
   it('reports a server error as not alive', async () => {
-    expect(await probePreview(await serve(503))).toBe(false)
+    expect(await probePreview(await serve(503), PROBE_BUDGET_MS)).toBe(false)
   })
 
   it('reports a refused connection as not alive', async () => {
@@ -144,7 +148,7 @@ describe('probePreview', () => {
     if (address === null || typeof address === 'string') throw new Error('expected a bound port')
     const url = `http://localhost:${address.port}`
     await new Promise<void>((done) => { server.close(() => { done() }) })
-    expect(await probePreview(url)).toBe(false)
+    expect(await probePreview(url, PROBE_BUDGET_MS)).toBe(false)
   })
 })
 

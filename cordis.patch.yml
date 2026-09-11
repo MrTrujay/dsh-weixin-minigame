@@ -41,3 +41,8 @@
           - '--prefer-online'
           - '@weadmin/weixin-minigame-helper-mcp@0.1.35'
         failOnStartupError: false
+        # The client's default tool-call timeout is 60s, which is shorter than
+        # three upstream tools legitimately take: packaging a game, uploading a
+        # version, and a burst screenshot capture the caller may ask to run for
+        # up to 60s by itself. Five minutes still bounds a hung call.
+        toolCallTimeoutMs: 300000

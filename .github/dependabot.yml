@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # The upstream helper is deliberately pinned inside cordis.patch.yml rather
+  # than declared as a dependency, so Dependabot cannot move it. Bumping it is a
+  # reviewed change: see CONTRIBUTING.md.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

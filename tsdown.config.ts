@@ -1,5 +1,5 @@
 /**
- * Build the node half (the skill, commands, and HTTP route) and the browser
+ * Build the node half (the skill and the HTTP route) and the browser
  * client bundle in the dsh ModuleLoader handoff format: the bundle registers
  * itself through `window.__ModuleLoader__.load({ id, factory })` and resolves
  * react from the loader's platform module table. CSS Modules are compiled by
@@ -25,7 +25,7 @@ export default defineConfig([
     platform: 'node',
     target: 'es2024',
     fixedExtension: false,
-    dts: false,
+    dts: true,
     clean: false,
   },
   {
@@ -37,7 +37,7 @@ export default defineConfig([
     dts: false,
     clean: false,
     sourcemap: true,
-    external: ['react', 'react/jsx-runtime', 'react-dom'],
+    deps: { neverBundle: ['react', 'react/jsx-runtime', 'react-dom'] },
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),
