@@ -8,8 +8,23 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # The host provides React through its platform module table: the browser
+      # bundle never resolves it from this package's dependencies, so a major
+      # bump changes what the tests exercise, not what the plugin loads.
+      - dependency-name: react
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-dom
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@types/react'
+        update-types: ['version-update:semver-major']
 
+  # One pull request for all of them: these change the release path as a set,
+  # and reviewing four diffs of the same contract buys nothing.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
