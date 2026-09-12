@@ -10,7 +10,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No `version` input: package.json's packageManager field is the
       # single source of truth, and pnpm/action-setup rejects both at once.

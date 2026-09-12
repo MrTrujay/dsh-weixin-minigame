@@ -14,7 +14,7 @@ jobs:
     steps:
       # No step in this job pushes, so the checkout token is not left in
       # .git/config while dependency lifecycle scripts run.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
