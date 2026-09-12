@@ -14,15 +14,15 @@ jobs:
     steps:
       # No step in this job pushes, so the checkout token is not left in
       # .git/config while dependency lifecycle scripts run.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
       # No `version` input: package.json's packageManager field is the
       # single source of truth, and pnpm/action-setup rejects both at once.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
