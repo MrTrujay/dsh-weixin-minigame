@@ -7,6 +7,21 @@ this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## Unreleased
 
+### Changed
+
+- The mini game preview now opens in dsh's built-in right-sidebar browser tab
+  instead of the plugin's own floating window. The tab opens automatically the
+  first time a packaged game is served; the session-header trigger opens or
+  reopens it. dsh's browser provides back/forward/reload and the address bar.
+- The bundle patch enables the `ui-sidebar-browser` row, which Web profiles
+  ship disabled by default. Desktop already has it on, so that override is a
+  no-op there.
+
+### Removed
+
+- The floating preview window and its overlay registration, drag/hide/end
+  controls, and embedded iframe.
+
 ## 0.1.0
 
 First release.

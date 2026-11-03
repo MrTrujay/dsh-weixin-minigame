@@ -1,6 +1,6 @@
 {
   "name": "@trujaycc/dsh-weixin-minigame",
-  "description": "Preview, debug (logs and screenshots), and publish WeChat Mini Games inside the dsh Web GUI, through the official mini game helper service",
+  "description": "Preview in dsh's built-in browser, debug (logs and screenshots), and publish WeChat Mini Games inside the dsh Web GUI, through the official mini game helper service",
   "version": "0.1.0",
   "author": {
     "name": "trujaycc",

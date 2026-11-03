@@ -2,16 +2,35 @@
 import { useSyncExternalStore } from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apply, type MinigameClientContext, type SlotRegistryFace } from '../src/client/index.ts'
-import { MinigameLauncher, type MinigameLauncherProps } from '../src/client/MinigameLauncher.tsx'
-import { MinigamePreview, type MinigamePreviewProps } from '../src/client/MinigamePreview.tsx'
-import { createPanelStore, type PanelSnapshot, type PanelStore } from '../src/client/panel-store.ts'
+import {
+  apply,
+  inject,
+  MinigameLauncher,
+  type MinigameClientContext,
+  type SidebarRightFace,
+  type SlotRegistryFace,
+} from '../src/client/index.ts'
+import type { MinigameLauncherProps } from '../src/client/MinigameLauncher.tsx'
+import { createPreviewStore, type PreviewSnapshot, type PreviewStore } from '../src/client/preview-store.ts'
 import { STATUS_ROUTE, type MinigameStatus } from '../src/minigame/wire.ts'
 
 /** One captured slot registration. */
 interface CapturedRegistration {
   options: { name: string; id: string; order?: number; inject?: () => Record<string, unknown> }
   component: (props: Record<string, unknown>) => unknown
+}
+
+/** One recorded call into dsh's built-in browser. */
+interface OpenCall {
+  kind: string
+  url: string | undefined
+}
+
+/** The built-in browser face, with the knobs a test needs. */
+interface FakeBrowser extends SidebarRightFace {
+  hasSurface: boolean
+  fail: boolean
+  readonly calls: OpenCall[]
 }
 
 const registrations: CapturedRegistration[] = []
@@ -28,8 +47,6 @@ beforeEach(() => {
   statusReachable = true
   statusBody = { preview: { running: false } }
   vi.useFakeTimers()
-  Element.prototype.setPointerCapture = () => {}
-  Element.prototype.releasePointerCapture = () => {}
   vi.stubGlobal('fetch', async (input: string) => {
     const url = String(input)
     requests.push(url)
@@ -61,13 +78,12 @@ async function poll(): Promise<void> {
 
 /**
  * Stand in for the renderer's binding of a `hooks` member to a `use<Name>`
- * selector hook, so the components are driven exactly as the product drives
- * them.
- * @param store - the shared panel store.
+ * selector hook, so the trigger is driven exactly as the product drives it.
+ * @param store - the shared preview store.
  * @returns the selector hook the registration would inject.
  */
-function panelHook(store: PanelStore): <T>(selector: (snapshot: PanelSnapshot) => T) => T {
-  return function usePanel<T>(selector: (snapshot: PanelSnapshot) => T): T {
+function previewHook(store: PreviewStore): <T>(selector: (snapshot: PreviewSnapshot) => T) => T {
+  return function usePreview<T>(selector: (snapshot: PreviewSnapshot) => T): T {
     return useSyncExternalStore(store.subscribe, () => selector(store.getSnapshot()))
   }
 }
@@ -94,13 +110,44 @@ function fakeSlots(): SlotRegistryFace {
   }
 }
 
+/**
+ * Build a built-in-browser face that records open requests.
+ * @param options - initial surface availability.
+ * @returns the fake, usable as `ctx.sidebarRight`.
+ */
+function fakeBrowser(options: { hasSurface?: boolean } = {}): FakeBrowser {
+  const state = {
+    hasSurface: options.hasSurface ?? true,
+    fail: false,
+    calls: [] as OpenCall[],
+  }
+  return {
+    get hasSurface() { return state.hasSurface },
+    set hasSurface(value: boolean) { state.hasSurface = value },
+    get fail() { return state.fail },
+    set fail(value: boolean) { state.fail = value },
+    get calls() { return state.calls },
+    active: () => (state.hasSurface ? {} : undefined),
+    openTab: (kind, optional) => {
+      if (state.fail) throw new Error('no tab type registered as "browser"')
+      state.calls.push({ kind, url: optional?.params?.url })
+    },
+  }
+}
+
 /** Build a client context whose effect callbacks are captured for disposal. */
-function fakeContext(): { ctx: MinigameClientContext; disposers: (() => void)[] } {
+function fakeContext(browser: FakeBrowser = fakeBrowser()): {
+  ctx: MinigameClientContext
+  browser: FakeBrowser
+  disposers: (() => void)[]
+} {
   const disposers: (() => void)[] = []
   return {
+    browser,
     disposers,
     ctx: {
       slots: fakeSlots(),
+      sidebarRight: browser,
       effect: (callback) => {
         const result = callback()
         if (typeof result === 'function') disposers.push(result)
@@ -129,41 +176,34 @@ const ONBOARDING: MinigameStatus = {
   },
 }
 
-/** Build preview props bound to a store. */
-function previewProps(store: PanelStore): MinigamePreviewProps {
-  return {
-    usePanel: panelHook(store),
-    hide: () => { store.hide() },
-    end: () => { store.end() },
-  }
-}
-
-/** Build launcher props bound to a store. */
-function launcherProps(store: PanelStore): MinigameLauncherProps {
-  return {
-    usePanel: panelHook(store),
-    open: () => { store.open() },
-    hide: () => { store.hide() },
-  }
+/** Build trigger props bound to a store. */
+function launcherProps(store: PreviewStore, open: () => void = vi.fn()): MinigameLauncherProps {
+  return { usePreview: previewHook(store), open }
 }
 
 describe('client plugin registration', () => {
-  it('registers the window in the overlay and the trigger in the session header', () => {
-    apply(fakeContext().ctx)
-
-    expect(injectedKeys).toEqual(['shell.overlay', 'conversation.session.header.utilities'])
-    expect(registrations.every(entry => entry.options.id === 'weixin-minigame')).toBe(true)
-    expect(registrations[0]?.component).toBe(MinigamePreview)
-    expect(registrations[1]?.component).toBe(MinigameLauncher)
+  it('requires the slot registry and the built-in browser service', () => {
+    expect(inject).toEqual(['slots', 'sidebarRight'])
   })
 
-  it('hands both entries the same panel source through the hooks compartment', () => {
+  it('registers only the session-header trigger, with no overlay window', () => {
     apply(fakeContext().ctx)
 
-    const first = registrations[0]?.options.inject?.() as { hooks?: { panel?: unknown } }
-    const second = registrations[1]?.options.inject?.() as { hooks?: { panel?: unknown } }
-    expect(first.hooks?.panel).toBeDefined()
-    expect(first.hooks?.panel).toBe(second.hooks?.panel)
+    expect(injectedKeys).toEqual(['conversation.session.header.utilities'])
+    expect(registrations).toHaveLength(1)
+    expect(registrations[0]?.options.id).toBe('weixin-minigame')
+    expect(registrations[0]?.component).toBe(MinigameLauncher)
+  })
+
+  it('hands the trigger the shared preview source and an open action', () => {
+    apply(fakeContext().ctx)
+
+    const injected = registrations[0]?.options.inject?.() as {
+      hooks?: { preview?: unknown }
+      open?: unknown
+    }
+    expect(injected.hooks?.preview).toBeDefined()
+    expect(typeof injected.open).toBe('function')
   })
 
   it('polls the host route once and stops on disposal', async () => {
@@ -182,9 +222,92 @@ describe('client plugin registration', () => {
   })
 })
 
-describe('panel store', () => {
+describe('automatic browser opening', () => {
+  it('opens the preview tab once a packaged game appears', async () => {
+    statusBody = RUNNING
+    const { ctx, browser } = fakeContext()
+    apply(ctx)
+    await settle()
+
+    expect(browser.calls).toEqual([{ kind: 'browser', url: 'http://localhost:3847' }])
+
+    // The same running game on a later poll must not pile up tabs.
+    await poll()
+    expect(browser.calls).toHaveLength(1)
+  })
+
+  it('does not open the onboarding page the helper serves before a game exists', async () => {
+    statusBody = ONBOARDING
+    const { ctx, browser } = fakeContext()
+    apply(ctx)
+    await settle()
+
+    expect(browser.calls).toEqual([])
+  })
+
+  it('does not open a preview that is recorded but not running', async () => {
+    statusBody = { preview: { running: false, url: 'http://localhost:3847' } }
+    const { ctx, browser } = fakeContext()
+    apply(ctx)
+    await settle()
+
+    expect(browser.calls).toEqual([])
+  })
+
+  it('waits for an on-screen session surface, then opens on the next poll', async () => {
+    statusBody = RUNNING
+    const { ctx, browser } = fakeContext(fakeBrowser({ hasSurface: false }))
+    apply(ctx)
+    await settle()
+
+    // The Plugins page or another main panel is showing: no sidebar to open into.
+    expect(browser.calls).toEqual([])
+
+    browser.hasSurface = true
+    await poll()
+    expect(browser.calls).toEqual([{ kind: 'browser', url: 'http://localhost:3847' }])
+  })
+
+  it('opens a new tab when the preview moves to another URL', async () => {
+    statusBody = RUNNING
+    const { ctx, browser } = fakeContext()
+    apply(ctx)
+    await settle()
+
+    statusBody = {
+      preview: {
+        running: true,
+        url: 'http://localhost:4001',
+        port: 4001,
+        gameDir: 'C:\\Temp\\ai-minigame-engine\\pack-bf2e2d0a2395',
+      },
+    }
+    await poll()
+
+    expect(browser.calls.map(call => call.url)).toEqual([
+      'http://localhost:3847',
+      'http://localhost:4001',
+    ])
+  })
+
+  it('retries quietly while the browser tab type is unavailable', async () => {
+    statusBody = RUNNING
+    const browser = fakeBrowser()
+    browser.fail = true
+    apply(fakeContext(browser).ctx)
+    await settle()
+
+    expect(browser.calls).toEqual([])
+
+    browser.fail = false
+    await poll()
+    expect(browser.calls).toEqual([{ kind: 'browser', url: 'http://localhost:3847' }])
+  })
+})
+
+describe('preview store', () => {
   it('keeps the snapshot reference stable until the fact moves', () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     const before = store.getSnapshot()
     expect(store.getSnapshot()).toBe(before)
     store.observe(RUNNING.preview)
@@ -192,7 +315,7 @@ describe('panel store', () => {
   })
 
   it('does not republish an unchanged poll', () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     store.observe(RUNNING.preview)
     const settled = store.getSnapshot()
     const listener = vi.fn()
@@ -206,230 +329,83 @@ describe('panel store', () => {
   })
 
   it('treats the helper onboarding page as not a game', () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     store.observe(ONBOARDING.preview)
     expect(store.getSnapshot().servingGame).toBe(false)
-    expect(store.getSnapshot().phase).toBe('hidden')
   })
 
   it('treats a record without a game directory as not a game', () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     store.observe({ running: true, url: 'http://localhost:3847' })
     expect(store.getSnapshot().servingGame).toBe(false)
   })
 
-  it('opens itself on the first packaged game, then leaves the choice alone', () => {
-    const store = createPanelStore()
-    store.observe(RUNNING.preview)
-    expect(store.getSnapshot()).toMatchObject({ phase: 'open', autoOpened: true, servingGame: true })
-
-    store.hide()
-    store.observe({ ...RUNNING.preview, port: 9999 })
-    expect(store.getSnapshot().phase).toBe('hidden')
-  })
-
   it('records an unreachable host route', () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     store.markUnreachable()
     expect(store.getSnapshot().reachable).toBe(false)
   })
 
   it('notifies subscribers once per real change', () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     const listener = vi.fn()
     store.subscribe(listener)
-    store.open()
+    store.observe(RUNNING.preview)
     expect(listener).toHaveBeenCalledTimes(1)
-    store.open()
+    store.observe({ ...RUNNING.preview })
     expect(listener).toHaveBeenCalledTimes(1)
-    store.hide()
+    store.observe(ONBOARDING.preview)
     expect(listener).toHaveBeenCalledTimes(2)
     store.subscribe(listener)()
-    store.end()
+    store.markUnreachable()
     expect(listener).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('MinigameLauncher', () => {
-  it('shows a quiet lamp with nothing running', () => {
-    const { container } = render(<MinigameLauncher {...launcherProps(createPanelStore())} />)
+  it('shows a quiet lamp and disables the button before any preview', () => {
+    const { container } = render(<MinigameLauncher {...launcherProps(createPreviewStore())} />)
 
-    expect(screen.getByRole('button', { name: /小游戏预览/ })).toBeDefined()
+    expect(screen.getByRole('button', { name: '小游戏预览' })).toBeDefined()
     expect(container.querySelector('[data-state="idle"]')).not.toBeNull()
     expect(container.querySelector('[data-state="live"]')).toBeNull()
+    expect(screen.getByRole('button', { name: '小游戏预览' }).hasAttribute('disabled')).toBe(true)
   })
 
-  it('lights up while a packaged game is being served', async () => {
-    const store = createPanelStore()
-    const { container, rerender } = render(<MinigameLauncher {...launcherProps(store)} />)
+  it('lights up and opens the built-in browser while a packaged game is served', async () => {
+    const store = createPreviewStore()
+    const open = vi.fn()
+    const { container, rerender } = render(<MinigameLauncher {...launcherProps(store, open)} />)
 
     await act(async () => { store.observe(RUNNING.preview) })
-    rerender(<MinigameLauncher {...launcherProps(store)} />)
+    rerender(<MinigameLauncher {...launcherProps(store, open)} />)
 
     expect(container.querySelector('[data-state="live"]')).not.toBeNull()
+    const button = screen.getByRole('button', { name: '小游戏预览' })
+    expect(button.hasAttribute('disabled')).toBe(false)
+
+    fireEvent.click(button)
+    expect(open).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays clickable for a recorded preview that is not answering', () => {
+    const store = createPreviewStore()
+    store.observe({ running: false, url: 'http://localhost:3847' })
+    render(<MinigameLauncher {...launcherProps(store)} />)
+
+    const button = screen.getByRole('button', { name: '小游戏预览' })
+    expect(button.hasAttribute('disabled')).toBe(false)
+    expect(button.getAttribute('title')).toContain('预览服务无响应')
   })
 
   it('shows a hollow lamp when the plugin route does not answer', async () => {
-    const store = createPanelStore()
+    const store = createPreviewStore()
     const { container, rerender } = render(<MinigameLauncher {...launcherProps(store)} />)
 
     await act(async () => { store.markUnreachable() })
     rerender(<MinigameLauncher {...launcherProps(store)} />)
 
     expect(container.querySelector('[data-state="unknown"]')).not.toBeNull()
-  })
-
-  it('opens the window, then collapses it instead of ending the preview', () => {
-    const store = createPanelStore()
-    render(<MinigameLauncher {...launcherProps(store)} />)
-    const button = screen.getByRole('button', { name: /小游戏预览/ })
-
-    fireEvent.click(button)
-    expect(store.getSnapshot().phase).toBe('open')
-    expect(button.getAttribute('aria-pressed')).toBe('true')
-
-    fireEvent.click(button)
-    expect(store.getSnapshot().phase).toBe('hidden')
-  })
-})
-
-describe('MinigamePreview', () => {
-  it('renders nothing while there is no preview to show', () => {
-    const { container } = render(<MinigamePreview {...previewProps(createPanelStore())} />)
-    expect(container.querySelector('section')).toBeNull()
-  })
-
-  it('renders nothing while the helper serves its own onboarding page', async () => {
-    const store = createPanelStore()
-    const { container } = render(<MinigamePreview {...previewProps(store)} />)
-    await act(async () => { store.observe(ONBOARDING.preview) })
-
-    expect(container.querySelector('section')).toBeNull()
-  })
-
-  it('opens itself the first time a packaged game appears', async () => {
-    const store = createPanelStore()
-    const { container } = render(<MinigamePreview {...previewProps(store)} />)
-
-    await act(async () => { store.observe(RUNNING.preview) })
-
-    expect(store.getSnapshot().phase).toBe('open')
-    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('http://localhost:3847')
-  })
-
-  it('auto-opens against a host payload that predates this client', () => {
-    // A `dsh web` that booted before this client existed sends no
-    // `servingGame` at all and still carries the old `panel` field. The
-    // packaged-game answer must therefore come from `gameDir`, which that
-    // payload has always carried — depending on a newer field here is exactly
-    // what kept the window from opening.
-    const store = createPanelStore()
-    store.observe({
-      running: true,
-      url: 'http://localhost:3847',
-      port: 3847,
-      gameDir: 'C:\\Temp\\ai-minigame-engine\\pack-bf2e2d0a2395',
-    })
-
-    expect(store.getSnapshot()).toMatchObject({ phase: 'open', servingGame: true, autoOpened: true })
-  })
-
-  it('hides without unmounting the preview page', async () => {
-    const store = createPanelStore()
-    const { container } = render(<MinigamePreview {...previewProps(store)} />)
-    await act(async () => { store.observe(RUNNING.preview) })
-
-    fireEvent.click(screen.getByRole('button', { name: '隐藏' }))
-
-    const section = container.querySelector('section')
-    expect(store.getSnapshot().phase).toBe('hidden')
-    // Still mounted, just collapsed: the game keeps running.
-    expect(section).not.toBeNull()
-    expect(section?.hasAttribute('data-hidden')).toBe(true)
-  })
-
-  it('ends the preview by unmounting the page, and can reopen it', async () => {
-    const store = createPanelStore()
-    const { container } = render(<MinigamePreview {...previewProps(store)} />)
-    await act(async () => { store.observe(RUNNING.preview) })
-
-    fireEvent.click(screen.getByRole('button', { name: '结束预览' }))
-    expect(store.getSnapshot().phase).toBe('ended')
-    expect(container.querySelector('section')).toBeNull()
-
-    await act(async () => { store.open() })
-    expect(container.querySelector('iframe')).not.toBeNull()
-  })
-
-  it('reloads the frame under a new key when refresh is pressed', async () => {
-    const store = createPanelStore()
-    const { container } = render(<MinigamePreview {...previewProps(store)} />)
-    await act(async () => { store.observe(RUNNING.preview) })
-
-    const before = container.querySelector('iframe')
-    fireEvent.click(screen.getByRole('button', { name: '刷新' }))
-    expect(container.querySelector('iframe')).not.toBe(before)
-  })
-
-  it('disables the frame actions while no preview is running', async () => {
-    const store = createPanelStore()
-    store.open()
-    render(<MinigamePreview {...previewProps(store)} />)
-
-    expect(screen.getByRole('button', { name: '刷新' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByRole('button', { name: '新标签页' }).hasAttribute('disabled')).toBe(true)
-  })
-
-  it('says the plugin is not mounted when its host route is unreachable', async () => {
-    const store = createPanelStore()
-    store.open()
-    const { rerender, container } = render(<MinigamePreview {...previewProps(store)} />)
-
-    await act(async () => { store.markUnreachable() })
-    rerender(<MinigamePreview {...previewProps(store)} />)
-
-    expect(container.textContent).toContain('预览插件未在这个界面上挂载')
-    expect(container.textContent).toContain('插件未挂载')
-  })
-
-  it('drags only from the grip, leaving the header controls clickable', async () => {
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({
-      left: 100, top: 100, width: 400, height: 300, right: 500, bottom: 400, x: 100, y: 100,
-      toJSON: () => ({}),
-    })
-    const capture = vi.fn()
-    Element.prototype.setPointerCapture = capture
-
-    const store = createPanelStore()
-    store.open()
-    const { container } = render(<MinigamePreview {...previewProps(store)} />)
-
-    const section = container.querySelector('section')
-    const grip = container.querySelector('section > div > span')
-    if (section === null || grip === null) throw new Error('expected the window and its grip')
-
-    fireEvent.pointerDown(grip, { pointerId: 1, clientX: 100, clientY: 100 })
-    fireEvent.pointerMove(grip, { pointerId: 1, clientX: 300, clientY: 250 })
-    fireEvent.pointerUp(grip, { pointerId: 1 })
-
-    expect(capture).toHaveBeenCalledTimes(1)
-    expect(section.getAttribute('style')).toContain('left: 300px')
-    expect(section.getAttribute('style')).toContain('top: 250px')
-  })
-
-  it('does not start a drag from a press on a header control', () => {
-    const capture = vi.fn()
-    Element.prototype.setPointerCapture = capture
-
-    const store = createPanelStore()
-    store.open()
-    render(<MinigamePreview {...previewProps(store)} />)
-
-    fireEvent.pointerDown(screen.getByRole('button', { name: '隐藏' }), {
-      pointerId: 1, clientX: 100, clientY: 100,
-    })
-
-    expect(capture).not.toHaveBeenCalled()
-    expect(store.getSnapshot().phase).toBe('open')
+    expect(screen.getByRole('button', { name: '小游戏预览' }).hasAttribute('disabled')).toBe(true)
   })
 })

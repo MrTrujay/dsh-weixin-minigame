@@ -2,15 +2,13 @@
 
 English | [中文](README.zh.md)
 
-Preview, develop, and debug (through logs and screenshots) WeChat Mini Games inside the dsh Web GUI. Modelled on the official [WeChat Mini Game Helper](https://gamemp.weixin.qq.com/doc/minigame-helper/guide/vscode-plugin.html).
-
-![The mini game preview window](docs/screenshot.png)
+Preview, develop, and debug (through logs and screenshots) WeChat Mini Games inside the dsh Web GUI. The preview runs in dsh's built-in browser tab; the plugin adds no window of its own. Modelled on the official [WeChat Mini Game Helper](https://gamemp.weixin.qq.com/doc/minigame-helper/guide/vscode-plugin.html).
 
 ## What it gives you
 
 | Surface | What it does |
 | --- | --- |
-| **Preview panel** | A floating preview window inside the interface that can be opened on its own. Both the preview and the credentials are managed by the official mini game helper service; this plugin neither stores nor uploads anything. |
+| **Browser preview** | The mini game opens in dsh's built-in browser tab in the right sidebar, which supplies history, reload, and the address bar. The helper's own preview page supplies the ⚙️ configuration and QR dialogs. Both the preview and the credentials are managed by the official mini game helper service; this plugin neither stores nor uploads anything. |
 | **`weixin-minigame-helper` skill** | Guidance for the MCP tools and this plugin, and for the game development workflow. |
 | **MCP bridge** | Connects dsh to the mini game helper service. |
 
@@ -94,13 +92,16 @@ No system-prompt section is registered, so nothing is paid on unrelated turns. T
 
 ### Interface
 
-A trigger button joins the top-right of the session header (the lamp on its left is green while a project is running, grey when idle, and hollow when the plugin is not mounted), alongside a floating window that embeds the official mini game helper preview service.
+A trigger button joins the top-right of the session header (the lamp on its left is green while a project is running, grey when idle, and hollow when the plugin is not mounted). Clicking it opens — or reopens — the preview in dsh's built-in browser tab in the right sidebar; the tab also opens automatically the first time a packaged game is served. dsh's browser supplies back/forward/reload and the address bar, and nothing floats over the conversation.
+
+The bundle patch enables dsh's `ui-sidebar-browser` row, because Web profiles ship it disabled by default; Desktop already has it on, so the override changes nothing there.
 
 ## Known Limitations and Deferred Work
 
 - **The upstream MCP server is a third-party dependency.** It is fetched by `npx` at boot, with the version pinned in `cordis.patch.yml` (currently `0.1.35`). Tool names, parameters, and behaviour can change with an upstream release, so run this plugin's tests before bumping that pin.
 - **The official mini game helper service leaves files in the game project** (screenshots, and so on). Add them to `.gitignore` yourself.
 - **One preview server per machine, shared across dsh instances and other hosts.** The helper records where it listens in a single file under the user's home directory, and the first process to bind takes the default port, so a second process using the helper (another dsh instance, or the official editor extension) overwrites that record and serves on the next free port.
+- **The preview needs dsh's built-in browser.** This bundle enables the `ui-sidebar-browser` row; disabling that row again leaves the trigger unable to open a tab. The tab opens automatically only while a Conversation is on screen — after returning to one, the next status poll opens it.
 - **The preview status is readable by any caller on the loopback interface.** It exposes nothing but a local address, so that is proportionate; there is no authentication beyond it.
 - **Restart required for first activation.** The client-module registry's package metadata cache never expires, so a freshly installed plugin is invisible until `dsh web` restarts.
 

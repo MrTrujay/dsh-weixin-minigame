@@ -1,7 +1,8 @@
 # @trujaycc/dsh-weixin-minigame bundle patch.
 #
-# Two rows: the plugin's own node half (skill + preview-status route), and the
-# MCP bridge that gives the agent the WeChat Mini Game tools.
+# Two inserted rows: the plugin's own node half (skill + preview-status route),
+# and the MCP bridge that gives the agent the WeChat Mini Game tools. One bare
+# row then re-enables the surface the preview opens in.
 #
 # Install into a profile with:
 #   dsh plugin --profile <name> add @trujaycc/dsh-weixin-minigame
@@ -10,7 +11,8 @@
 # served through the package's dsh.client manifest.
 
 - insert:
-    # The skill and the /minigame/status route the preview panel polls.
+    # The skill and the /minigame/status route the browser half polls before it
+    # opens the preview in the built-in browser.
     # Nothing here is per-session: the host skill registry reaches every session
     # of every agent preset.
     - id: weixin-minigame
@@ -46,3 +48,10 @@
         # version, and a burst screenshot capture the caller may ask to run for
         # up to 60s by itself. Five minutes still bounds a hung call.
         toolCallTimeoutMs: 300000
+
+# The preview opens in dsh's built-in browser tab. The web-app bundle ships
+# that tab type but leaves it disabled outside Desktop ("Web profiles opt in"),
+# so this bundle turns it on for every profile it composes into. Desktop
+# already has it on and the same override is a no-op there.
+- id: ui-sidebar-browser
+  disabled: false

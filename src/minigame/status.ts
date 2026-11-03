@@ -32,11 +32,11 @@ export interface PreviewRecord {
   readonly pid?: number
 }
 
-/** What the browser panel needs to know about the preview. */
+/** What the browser half needs to know about the preview. */
 export interface PreviewStatus {
   /** Whether a preview server was recorded and answered a probe. */
   readonly running: boolean
-  /** URL to embed, present whenever a record exists. */
+  /** URL to open in the built-in browser, present whenever a record exists. */
   readonly url?: string
   /** Listening port, present whenever a record exists. */
   readonly port?: number
@@ -143,7 +143,7 @@ export async function probePreview(url: string, timeoutMs: number = PROBE_TIMEOU
 
 /**
  * Resolve the current preview status: the recorded origin confirmed by a probe.
- * @returns the status the panel reports.
+ * @returns the status the browser half reports.
  *
  * Whether that server is serving a game or the helper's own onboarding page is
  * deliberately NOT answered here. The two halves load at different times — this

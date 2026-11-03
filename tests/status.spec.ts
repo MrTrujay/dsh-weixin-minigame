@@ -74,7 +74,7 @@ describe('parsePreviewRecord', () => {
     })
   })
 
-  it('drops a path and query, keeping only the origin the panel embeds', () => {
+  it('drops a path and query, keeping only the origin the browser opens', () => {
     expect(parsePreviewRecord('{"url":"http://127.0.0.1:3847/game?x=1"}')?.url)
       .toBe('http://127.0.0.1:3847')
   })

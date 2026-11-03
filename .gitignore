@@ -1,3 +1,6 @@
 node_modules/
 lib/
 *.tgz
+
+# Local working notes: development-to-release reference.
+/notes/release-process.md

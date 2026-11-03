@@ -6,8 +6,8 @@
  *
  * - the `weixin-minigame-helper` skill, whose body carries the preview/repair
  *   loop the model follows after it writes game code;
- * - the `GET /minigame/status` route the browser half polls for the preview
- *   address.
+ * - the `GET /minigame/status` route the browser half polls before opening the
+ *   preview in dsh's built-in browser.
  *
  * Neither is a required `inject`. A required injection holds the whole plugin
  * pending, so a profile missing either registry would silently contribute
@@ -126,7 +126,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 /**
- * `GET /minigame/status`: the preview server the panel should embed.
+ * `GET /minigame/status`: the preview origin the built-in browser should open.
  * @param req - the incoming request.
  * @param res - response to write.
  */

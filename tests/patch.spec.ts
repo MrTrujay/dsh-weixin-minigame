@@ -19,12 +19,28 @@ interface PatchRow {
   }
 }
 
+/** One top-level patch entry: an insert list, or an override of an existing row. */
+interface PatchEntry {
+  id?: string
+  insert?: PatchRow[]
+  disabled?: boolean
+}
+
 const text = readFileSync(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
-const rows = (parse(text) as { insert: PatchRow[] }[])[0]?.insert ?? []
+const patches = parse(text) as PatchEntry[]
+const rows = patches[0]?.insert ?? []
+const browserOverride = patches.find(entry => entry.id === 'ui-sidebar-browser')
 
 describe('cordis.patch.yml', () => {
   it('parses, and inserts the rows the bundle promises, in order', () => {
     expect(rows.map(row => row.id)).toEqual(['weixin-minigame', 'minigame-mcp'])
+  })
+
+  it('enables the built-in browser tab that Web profiles ship disabled', () => {
+    // The preview opens in this tab type. Web profiles leave it off by default
+    // ("Web profiles opt in"); Desktop already has it on, so the override is a
+    // no-op there.
+    expect(browserOverride?.disabled).toBe(false)
   })
 
   it('mounts this package by its published name', () => {

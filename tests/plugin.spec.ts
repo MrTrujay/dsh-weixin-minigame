@@ -170,6 +170,7 @@ describe('plugin activation', () => {
     const body = String(skill?.['content'])
     expect(body).toContain('mcp__minigame__run_game')
     expect(body).toContain('mcp__minigame__get_logs')
+    expect(body).toContain('内置浏览器')
     expect(body).toContain('禁止再调用 `run_game`')
   })
 
